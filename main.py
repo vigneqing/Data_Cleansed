@@ -1,3 +1,4 @@
+
 import os
 import shutil
 import cv2
@@ -8,10 +9,11 @@ import numpy as np
 
 
 class AnnotationViewer:
-    def __init__(self, root, image_folder, dest_folders):
+    def __init__(self, root, image_folder, dest_folders, save_folder):
         self.root = root
         self.image_folder = image_folder
         self.dest_folders = dest_folders 
+        self.save_folder = save_folder  # 新增保存文件夹
         self.image_files = self.get_image_files()
         self.current_index = 0
         self.history = []  # 用于存储操作历史记录
@@ -19,6 +21,7 @@ class AnnotationViewer:
         # 确保目标文件夹存在
         for folder in self.dest_folders.values():
             os.makedirs(folder, exist_ok=True)
+        os.makedirs(self.save_folder, exist_ok=True)  # 确保保存文件夹存在
 
         self.setup_ui()
         self.load_image()
@@ -62,10 +65,10 @@ class AnnotationViewer:
         # 功能按钮
         func_frame = ttk.Frame(control_frame)
         func_frame.pack(side=tk.LEFT, padx=10)
-        ttk.Button(func_frame, text="保留 (D)", command=self.keep_image).pack(side=tk.LEFT, padx=2)
-        ttk.Button(func_frame, text="移动到 ERROR (E)", command=lambda: self.move_image("error")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(func_frame, text="移动到 INACCURATE (I)", command=lambda: self.move_image("inaccurate")).pack(side=tk.LEFT, padx=2)
-        ttk.Button(func_frame, text="移动到 SINGLE_LIGHT (S)", command=lambda: self.move_image("single_light")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(func_frame, text="移动到 ERROR (A)", command=lambda: self.move_image("error")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(func_frame, text="移动到 INACCURATE (S)", command=lambda: self.move_image("inaccurate")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(func_frame, text="移动到 SINGLE_LIGHT (D)", command=lambda: self.move_image("single_light")).pack(side=tk.LEFT, padx=2)
+        ttk.Button(func_frame, text="保存 (F)", command=self.save_image).pack(side=tk.LEFT, padx=2)  # 保留保存按钮
         ttk.Button(func_frame, text="撤销 (Z)", command=self.undo).pack(side=tk.LEFT, padx=2)  # 新增撤销按钮
 
         # 退出按钮
@@ -76,18 +79,19 @@ class AnnotationViewer:
         self.root.bind("<Left>", lambda e: self.prev_image())
         self.root.bind("<Right>", lambda e: self.next_image())
         self.root.bind("z", lambda e: self.undo())  # 绑定撤销快捷键 Z
+        self.root.bind("f", lambda e: self.save_image())  # 绑定保存快捷键 F
 
     def handle_keypress(self, event):
         """处理键盘事件"""
         key = event.char.lower()
-        if key == 'd':
-            self.keep_image()
-        elif key == 'e':  # 快捷键 E 对应 ERROR 文件夹
+        if key == 'a':  # 快捷键 A 对应 ERROR 文件夹
             self.move_image("error")
-        elif key == 'i':  # 快捷键 I 对应 INACCURATE 文件夹
+        elif key == 's':  # 快捷键 S 对应 INACCURATE 文件夹
             self.move_image("inaccurate")
-        elif key == 's':  # 快捷键 S 对应 SINGLE_LIGHT 文件夹
+        elif key == 'd':  # 快捷键 D 对应 SINGLE_LIGHT 文件夹
             self.move_image("single_light")
+        elif key == 'f':  # 快捷键 F 对应保存
+            self.save_image()
         elif key == 'q':
             self.root.quit()
         elif key == 'z':  # 快捷键 Z 对应撤销
@@ -194,11 +198,6 @@ class AnnotationViewer:
         new_size = (int(w * ratio), int(h * ratio))
         return cv2.resize(img, new_size, interpolation=cv2.INTER_AREA)
 
-    def keep_image(self):
-        """保留当前图片"""
-        self.current_index += 1
-        self.load_image()
-
     def move_image(self, dest_key):
         """移动图片到指定的目标文件夹"""
         dest_folder = self.dest_folders.get(dest_key)
@@ -245,6 +244,51 @@ class AnnotationViewer:
         self.image_files = self.get_image_files()
         self.load_image()
 
+    def save_image(self):
+        """保存当前图片和标注到保存文件夹"""
+        if not self.save_folder:
+            messagebox.showwarning("错误", "未指定保存文件夹")
+            return
+
+        # 获取目标目录中已有的最大序号
+        existing_files = [f for f in os.listdir(self.save_folder) if f.startswith("image_")]
+        max_index = max([int(f.split("_")[1].split(".")[0]) for f in existing_files], default=0)
+
+        # 生成新的文件名（序号递增）
+        new_index = max_index + 1
+        new_name = f"image_{new_index}"
+        base_name, ext = os.path.splitext(self.current_file)
+
+        # 检查目标目录中是否已经存在同名文件
+        while os.path.exists(os.path.join(self.save_folder, f"{new_name}{ext}")):
+            new_index += 1
+            new_name = f"image_{new_index}"
+
+        # 移动并重命名图片文件
+        src_img = os.path.join(self.image_folder, self.current_file)
+        dst_img = os.path.join(self.save_folder, f"{new_name}{ext}")
+        shutil.move(src_img, dst_img)
+
+        # 移动并重命名标注文件
+        src_txt = os.path.join(self.image_folder, base_name + ".txt")
+        dst_txt = None
+        if os.path.exists(src_txt):
+            dst_txt = os.path.join(self.save_folder, f"{new_name}.txt")
+            shutil.move(src_txt, dst_txt)
+
+        # 记录操作历史
+        self.history.append({
+            "action": "save",
+            "src_img": src_img,
+            "dst_img": dst_img,
+            "src_txt": src_txt,
+            "dst_txt": dst_txt
+        })
+
+        # 更新文件列表并加载下一张图片
+        self.image_files = self.get_image_files()
+        self.load_image()
+            
     def undo(self):
         """撤销上一次操作"""
         if not self.history:
@@ -261,6 +305,15 @@ class AnnotationViewer:
             # 恢复标注文件（如果存在）
             if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
                 shutil.move(last_action["dst_txt"], last_action["src_txt"])
+
+        elif last_action["action"] == "save":
+            # 删除保存的图片文件
+            if os.path.exists(last_action["dst_img"]):
+                os.remove(last_action["dst_img"])
+
+            # 删除保存的标注文件（如果存在）
+            if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
+                os.remove(last_action["dst_txt"])
 
         # 更新文件列表并重新加载当前图片
         self.image_files = self.get_image_files()
@@ -285,6 +338,7 @@ if __name__ == "__main__":
         "inaccurate": select_folder("请选择 INACCURATE 文件夹"),
         "single_light": select_folder("请选择 SINGLE_LIGHT 文件夹")
     }
+    save_folder = select_folder("请选择保存文件夹")  # 新增保存文件夹选择
 
-    viewer = AnnotationViewer(root, image_folder, dest_folders)
+    viewer = AnnotationViewer(root, image_folder, dest_folders, save_folder)
     root.mainloop()
