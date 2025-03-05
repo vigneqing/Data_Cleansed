@@ -35,7 +35,7 @@ class AnnotationViewer:
 
     def setup_ui(self):
         """创建界面布局"""
-        self.root.title("图片标注查看器")
+        self.root.title("黑奴模拟器")
 
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill=tk.BOTH, expand=True)
