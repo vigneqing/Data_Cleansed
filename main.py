@@ -298,26 +298,34 @@ class AnnotationViewer:
         # 取出最近的一次操作记录
         last_action = self.history.pop()
 
-        if last_action["action"] == "move":
-            # 恢复图片文件
-            shutil.move(last_action["dst_img"], last_action["src_img"])
+        try:
+            if last_action["action"] == "move":
+                # 恢复图片文件
+                shutil.move(last_action["dst_img"], last_action["src_img"])
 
-            # 恢复标注文件（如果存在）
-            if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
-                shutil.move(last_action["dst_txt"], last_action["src_txt"])
+                # 恢复标注文件（如果存在）
+                if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
+                    shutil.move(last_action["dst_txt"], last_action["src_txt"])
 
-        elif last_action["action"] == "save":
-            # 删除保存的图片文件
-            if os.path.exists(last_action["dst_img"]):
-                os.remove(last_action["dst_img"])
+            elif last_action["action"] == "save":
+                # 创建文件的副本，然后删除原文件
+                if os.path.exists(last_action["dst_img"]):
+                    shutil.copy2(last_action["dst_img"], last_action["src_img"])
+                    os.remove(last_action["dst_img"])
 
-            # 删除保存的标注文件（如果存在）
-            if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
-                os.remove(last_action["dst_txt"])
+                # 对标注文件执行相同操作
+                if last_action["dst_txt"] and os.path.exists(last_action["dst_txt"]):
+                    shutil.copy2(last_action["dst_txt"], last_action["src_txt"])
+                    os.remove(last_action["dst_txt"])
 
-        # 更新文件列表并重新加载当前图片
-        self.image_files = self.get_image_files()
-        self.load_image()
+            # 更新文件列表并重新加载当前图片
+            self.image_files = self.get_image_files()
+            self.load_image()
+
+        except Exception as e:
+            messagebox.showerror("错误", f"撤销操作失败: {str(e)}")
+            # 发生错误时，从历史记录中移除失败的操作
+            self.history = self.history[:-1] if self.history else []
 
 
 def select_folder(title):
@@ -342,3 +350,4 @@ if __name__ == "__main__":
 
     viewer = AnnotationViewer(root, image_folder, dest_folders, save_folder)
     root.mainloop()
+
